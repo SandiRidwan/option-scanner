@@ -1,0 +1,15 @@
+# Environment variables — JANGAN PERNAH COMMIT
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files — generated saat runtime
+data/
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
