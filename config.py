@@ -1,20 +1,34 @@
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
 # API Keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-# Database
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 5432)),
-    "dbname": os.getenv("DB_NAME", "options_scanner"),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "postgres")
-}
+# Database — Railway inject DATABASE_URL, fallback ke individual vars untuk local
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if DATABASE_URL:
+    # Railway mode — parse DATABASE_URL
+    import urllib.parse
+    parsed = urllib.parse.urlparse(DATABASE_URL)
+    DB_CONFIG = {
+        "host": parsed.hostname,
+        "port": parsed.port or 5432,
+        "dbname": parsed.path.lstrip("/"),
+        "user": parsed.username,
+        "password": parsed.password
+    }
+else:
+    # Local mode — pakai individual vars
+    DB_CONFIG = {
+        "host": os.getenv("DB_HOST", "localhost"),
+        "port": int(os.getenv("DB_PORT", 5432)),
+        "dbname": os.getenv("DB_NAME", "options_scanner"),
+        "user": os.getenv("DB_USER", "postgres"),
+        "password": os.getenv("DB_PASSWORD", "postgres")
+    }
 
 # Mode
 DRY_RUN = os.getenv("DRY_RUN", "true").lower() == "true"
@@ -40,10 +54,7 @@ FILTERS = {
     "max_delta": float(os.getenv("MAX_DELTA", 0.70))
 }
 
-# Ticker Universe — top liquid US equities + ETFs
-# Ini 50 ticker paling likuid sebagai starting universe
-# Lebih sedikit dari 4,000 tapi cukup untuk prove concept
-# dan yfinance tidak akan timeout
+# Ticker Universe
 TICKER_UNIVERSE = [
     "SPY", "QQQ", "IWM", "DIA", "GLD", "SLV", "TLT", "HYG",
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA",
