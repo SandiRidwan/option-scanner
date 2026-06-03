@@ -18,8 +18,6 @@
 
 ---
 
-## 🎬 Demo
-
 ## 📹 Demo
 
 <div align="center">
