@@ -20,17 +20,28 @@
 
 ## 🎬 Demo
 
+## 📹 Demo
+
 <div align="center">
-
-> 📸 **Replace with your actual demo media below**
-
-<!-- THUMBNAIL: Upload to GitHub Issues → copy link → replace below -->
-[![Demo Video](https://via.placeholder.com/860x480/0D1117/00FF88?text=🎯+DEMO+VIDEO+THUMBNAIL+—+Upload+yours+here)](https://youtube.com/YOUR_VIDEO_ID)
-
-<!-- GIF: Record terminal + Discord alert → compress at ezgif.com → upload via GitHub Issue trick -->
-<!-- <img src="https://github.com/user-attachments/assets/PASTE_YOUR_GIF_LINK_HERE" width="860" /> -->
-
+  <a href="https://youtube.com/watch?v=4KJvm8EluJU">
+    <img src="Thumbnail.png" width="860" alt="Watch full demo on YouTube" />
+  </a>
+  <br/>
+  <sub><i>Click to watch — pipeline run, Slack alerts, CSV output walkthrough</i></sub>
 </div>
+
+<br/>
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/15283ae1-e175-4e0e-b6f4-d2d0dc453058" 
+         width="860" 
+         controls 
+         autoplay 
+         loop 
+         muted>
+  </video>
+</div>
+
 
 **What you'll see in the demo:**
 - 🔍 Scanner fetching 50 tickers live from yfinance
