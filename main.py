@@ -6,6 +6,10 @@ from datetime import datetime
 if sys.stdout.encoding != 'utf-8':
     sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
 
+# Buat folder logs dan data SEBELUM logging diinisialisasi
+os.makedirs("logs", exist_ok=True)
+os.makedirs("data", exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -23,11 +27,6 @@ def main():
     logger.info(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 50)
 
-    # Pastikan folder logs dan data ada
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("data", exist_ok=True)
-
-    # Verifikasi config
     from config import (
         GROQ_API_KEY, DISCORD_WEBHOOK, DRY_RUN,
         SCAN_TIME, MIDDAY_TIME, EOD_TIME, TIMEZONE
@@ -47,7 +46,6 @@ def main():
         logger.error("DISCORD_WEBHOOK tidak ditemukan di .env — abort.")
         sys.exit(1)
 
-    # Test DB connection
     try:
         from database import get_connection
         conn = get_connection()
@@ -57,7 +55,6 @@ def main():
         logger.error(f"Database connection failed: {e} — abort.")
         sys.exit(1)
 
-    # Start scheduler
     logger.info("Starting scheduler...")
     from scheduler import start_scheduler
     start_scheduler()
