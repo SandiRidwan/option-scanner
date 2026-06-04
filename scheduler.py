@@ -1,6 +1,7 @@
 import logging
 import sys
 import json
+import os
 import pandas as pd
 from datetime import datetime
 import pandas_market_calendars as mcal
@@ -9,7 +10,15 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from config import SCAN_TIME, MIDDAY_TIME, EOD_TIME, TIMEZONE
-from scanner i
+from scanner import run_scanner
+from scorer import run_scorer
+from signal_bot import generate_kill_shot_explanation
+from discord_alert import send_kill_shot_alert, send_midday_update, send_eod_recap
+from database import insert_signal, upsert_daily_log, increment_alerts_sent
+
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -22,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 ET = pytz.timezone("America/New_York")
 nyse = mcal.get_calendar("NYSE")
+
+SIGNAL_OUTPUT_PATH = "data/signal_output.json"
+SCORED_CSV_PATH = "data/scored_contracts.csv"
 
 
 def is_market_open_today() -> bool:
@@ -60,14 +72,14 @@ def job_morning_scan():
         explanation = generate_kill_shot_explanation(kill_shot)
 
         # Step 4: Load signal output
-        with open("data/signal_output.json", encoding="utf-8") as f:
+        with open(SIGNAL_OUTPUT_PATH, encoding="utf-8") as f:
             signal_output = json.load(f)
 
         # Step 5: Insert ke DB
         insert_signal(kill_shot, explanation)
 
         # Step 6: Upsert daily log
-        scored_df = pd.read_csv("data/scored_contracts.csv")
+        scored_df = pd.read_csv(SCORED_CSV_PATH)
         total_scanned = len(scored_df)
         total_tickers = scored_df["ticker"].nunique()
         top_score = float(scored_df["composite_score"].max())
@@ -85,8 +97,12 @@ def job_kill_shot_alert():
         logger.info("Market tutup hari ini — kill shot alert dilewati.")
         return
 
+    if not os.path.exists(SIGNAL_OUTPUT_PATH):
+        logger.warning("signal_output.json tidak ada — skip kill shot alert.")
+        return
+
     try:
-        with open("data/signal_output.json", encoding="utf-8") as f:
+        with open(SIGNAL_OUTPUT_PATH, encoding="utf-8") as f:
             signal_output = json.load(f)
 
         success = send_kill_shot_alert(signal_output)
@@ -103,11 +119,19 @@ def job_midday_update():
         logger.info("Market tutup hari ini — midday update dilewati.")
         return
 
+    if not os.path.exists(SIGNAL_OUTPUT_PATH):
+        logger.warning("signal_output.json tidak ada — skip midday update.")
+        return
+
+    if not os.path.exists(SCORED_CSV_PATH):
+        logger.warning("scored_contracts.csv tidak ada — skip midday update.")
+        return
+
     try:
-        with open("data/signal_output.json", encoding="utf-8") as f:
+        with open(SIGNAL_OUTPUT_PATH, encoding="utf-8") as f:
             signal_output = json.load(f)
 
-        scored_df = pd.read_csv("data/scored_contracts.csv")
+        scored_df = pd.read_csv(SCORED_CSV_PATH)
         top_contracts = scored_df.nlargest(5, "composite_score").to_dict("records")
 
         success = send_midday_update(signal_output, top_contracts)
@@ -124,11 +148,19 @@ def job_eod_recap():
         logger.info("Market tutup hari ini — EOD recap dilewati.")
         return
 
+    if not os.path.exists(SIGNAL_OUTPUT_PATH):
+        logger.warning("signal_output.json tidak ada — skip EOD recap.")
+        return
+
+    if not os.path.exists(SCORED_CSV_PATH):
+        logger.warning("scored_contracts.csv tidak ada — skip EOD recap.")
+        return
+
     try:
-        with open("data/signal_output.json", encoding="utf-8") as f:
+        with open(SIGNAL_OUTPUT_PATH, encoding="utf-8") as f:
             signal_output = json.load(f)
 
-        scored_df = pd.read_csv("data/scored_contracts.csv")
+        scored_df = pd.read_csv(SCORED_CSV_PATH)
         total_scanned = len(scored_df)
         top_score = float(scored_df["composite_score"].max())
 
