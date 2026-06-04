@@ -9,15 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 
 from config import SCAN_TIME, MIDDAY_TIME, EOD_TIME, TIMEZONE
-from scanner import run_scanner
-from scorer import run_scorer
-from signal_bot import generate_kill_shot_explanation
-from discord_alert import send_kill_shot_alert, send_midday_update, send_eod_recap
-from database import insert_signal, upsert_daily_log, increment_alerts_sent
-
-if sys.stdout.encoding != 'utf-8':
-    sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
-
+from scanner i
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
