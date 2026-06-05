@@ -3,13 +3,14 @@ import pandas as pd
 import logging
 import time
 import sys
-import requests
 from datetime import datetime, date
 from config import TICKER_UNIVERSE, FILTERS
 
+# Fix encoding untuk Windows Command Prompt
 if sys.stdout.encoding != 'utf-8':
     sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='utf-8', buffering=1)
 
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -20,23 +21,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-}
-
-
-def get_yf_session():
-    """Buat requests session dengan custom headers untuk bypass throttling."""
-    session = requests.Session()
-    session.headers.update(HEADERS)
-    return session
-
 
 def get_nearest_expiry(ticker_obj):
+    """
+    Ambil expiry date terdekat yang masih 0DTE atau 1-7 hari ke depan.
+    Teknik advance: filter expiry yang terlalu jauh karena liquidity
+    options menurun drastis semakin jauh expiry-nya.
+    """
     try:
         expirations = ticker_obj.options
         if not expirations:
@@ -61,9 +52,13 @@ def get_nearest_expiry(ticker_obj):
         return None
 
 
-def fetch_options_chain(ticker_symbol, expiry, session=None):
+def fetch_options_chain(ticker_symbol, expiry):
+    """
+    Ambil options chain (calls) untuk satu ticker.
+    Fokus CALLS untuk 0DTE scanner.
+    """
     try:
-        ticker = yf.Ticker(ticker_symbol, session=session)
+        ticker = yf.Ticker(ticker_symbol)
         chain = ticker.option_chain(expiry)
         calls = chain.calls.copy()
 
@@ -87,19 +82,31 @@ def fetch_options_chain(ticker_symbol, expiry, session=None):
 
 
 def apply_liquidity_filter(df):
+    """
+    Filter kontrak berdasarkan minimum liquidity.
+    Kombinasi OI + Volume + Bid-Ask spread.
+    """
     if df is None or df.empty:
         return pd.DataFrame()
 
     filtered = df.copy()
-    filtered = filtered[filtered["openInterest"] >= FILTERS["min_open_interest"]]
+
+    filtered = filtered[
+        filtered["openInterest"] >= FILTERS["min_open_interest"]
+    ]
+
     filtered["volume"] = filtered["volume"].fillna(0)
     filtered = filtered[filtered["volume"] >= FILTERS["min_volume"]]
+
     filtered = filtered[filtered["bid"] > 0]
     filtered = filtered[filtered["ask"] > 0]
 
     filtered["mid_price"] = (filtered["bid"] + filtered["ask"]) / 2
-    filtered["spread_pct"] = (filtered["ask"] - filtered["bid"]) / filtered["mid_price"]
+    filtered["spread_pct"] = (
+        filtered["ask"] - filtered["bid"]
+    ) / filtered["mid_price"]
     filtered = filtered[filtered["spread_pct"] <= 0.50]
+
     filtered = filtered[
         (filtered["moneyness"] >= 0.85) &
         (filtered["moneyness"] <= 1.15)
@@ -108,8 +115,11 @@ def apply_liquidity_filter(df):
     return filtered
 
 
-def _run_scanner_once(session=None):
-    """Single scan attempt — return DataFrame atau empty."""
+def run_scanner():
+    """
+    Main scanner function.
+    Loop semua ticker, ambil data, filter, return dataframe bersih.
+    """
     logger.info("=" * 50)
     logger.info(f"Scanner started - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Scanning {len(TICKER_UNIVERSE)} tickers...")
@@ -120,14 +130,14 @@ def _run_scanner_once(session=None):
 
     for ticker_symbol in TICKER_UNIVERSE:
         try:
-            ticker_obj = yf.Ticker(ticker_symbol, session=session)
+            ticker_obj = yf.Ticker(ticker_symbol)
             expiry = get_nearest_expiry(ticker_obj)
 
             if not expiry:
                 logger.debug(f"{ticker_symbol}: no valid expiry found, skipping")
                 continue
 
-            chain = fetch_options_chain(ticker_symbol, expiry, session=session)
+            chain = fetch_options_chain(ticker_symbol, expiry)
             filtered = apply_liquidity_filter(chain)
 
             if not filtered.empty:
@@ -159,41 +169,6 @@ def _run_scanner_once(session=None):
         logger.info(f"Failed: {', '.join(failed_tickers)}")
 
     return result
-
-
-def run_scanner():
-    """
-    Main scanner dengan retry logic + custom session.
-    3 attempts dengan delay 60s antar attempt.
-    Fallback ke cached scan_result.csv kalau semua gagal.
-    """
-    import os
-    session = get_yf_session()
-
-    for attempt in range(1, 4):
-        logger.info(f"Scan attempt {attempt}/3...")
-        result = _run_scanner_once(session=session)
-
-        if not result.empty:
-            logger.info(f"Scan successful on attempt {attempt}.")
-            return result
-
-        if attempt < 3:
-            logger.warning(f"Attempt {attempt} returned empty — retry in 60s...")
-            time.sleep(60)
-
-    # Semua retry gagal — coba fallback ke cache
-    logger.error("All 3 scan attempts failed.")
-
-    cache_path = "data/scan_result.csv"
-    if os.path.exists(cache_path):
-        logger.warning("Falling back to cached scan_result.csv from previous run.")
-        df = pd.read_csv(cache_path)
-        logger.warning(f"Loaded {len(df)} contracts from cache.")
-        return df
-
-    logger.error("No cache available. Aborting.")
-    return pd.DataFrame()
 
 
 if __name__ == "__main__":
