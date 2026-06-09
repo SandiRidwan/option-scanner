@@ -2,7 +2,6 @@ import logging
 import sys
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from datetime import date
 from config import DB_CONFIG
 
 if sys.stdout.encoding != 'utf-8':
@@ -138,3 +137,76 @@ def increment_alerts_sent() -> bool:
     except Exception as e:
         logger.error(f"increment_alerts_sent() failed: {e}")
         return False
+
+
+def get_latest_signal() -> dict:
+    """
+    Ambil signal terbaru hari ini dari DB.
+    Return dict atau None kalau tidak ada.
+    """
+    try:
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("""
+            SELECT ticker, strike, expiry::text, option_type,
+                   composite_score, delta_score, vol_oi_score, gamma_score,
+                   underlying_price, bid, ask, mid_price,
+                   volume, open_interest, implied_volatility, explanation
+            FROM signals
+            WHERE DATE(created_at) = CURRENT_DATE
+            ORDER BY composite_score DESC
+            LIMIT 1
+        """)
+
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            logger.warning("No signal found in DB for today.")
+            return None
+
+        result = dict(row)
+        result["strike"] = float(result["strike"])
+        result["composite_score"] = float(result["composite_score"])
+        logger.info(f"Loaded signal from DB: {result['ticker']} ${result['strike']} {result['option_type']}")
+        return result
+
+    except Exception as e:
+        logger.error(f"get_latest_signal() failed: {e}")
+        return None
+
+
+def get_latest_daily_log() -> dict:
+    """
+    Ambil daily log hari ini dari DB.
+    Return dict atau None kalau tidak ada.
+    """
+    try:
+        conn = get_connection()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("""
+            SELECT *
+            FROM daily_log
+            WHERE log_date = CURRENT_DATE
+            LIMIT 1
+        """)
+
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            logger.warning("No daily log found for today.")
+            return None
+
+        result = dict(row)
+        result["top_score"] = float(result["top_score"])
+        result["kill_shot_strike"] = float(result["kill_shot_strike"])
+        return result
+
+    except Exception as e:
+        logger.error(f"get_latest_daily_log() failed: {e}")
+        return None
